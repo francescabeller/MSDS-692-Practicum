@@ -4,13 +4,13 @@ os.environ['HDF5_DISABLE_VERSION_CHECK'] = '1'
 
 import cv2     # for capturing videos
 import math   # for mathematical operations
-import matplotlib.pyplot as plt    # for plotting the images
-%matplotlib inline
 import pandas as pd
+import matplotlib.pyplot as plt
 from keras.preprocessing import image   # for preprocessing the images
 import numpy as np    # for mathematical operations
 from keras.utils import np_utils
 from skimage.transform import resize   # for resizing images
+from keras.applications.vgg16 import preprocess_input
 
 
 #####################################################################
@@ -55,7 +55,7 @@ for i in range(1,6):
             filename =f"{cd}/frames/{ext}frame%d.jpg" % count;count+=1
             cv2.imwrite(filename, frame)
     cap.release()
-    print ("Done!")
+    print("Done!")
 
 
 ########################################
@@ -84,7 +84,6 @@ for i in range(0,X.shape[0]):
 X = np.array(image)
 
 # Pre-processing
-from keras.applications.vgg16 import preprocess_input
 X = preprocess_input(X, mode='tf')
 
 
@@ -94,7 +93,7 @@ X = preprocess_input(X, mode='tf')
 
 # Split training and test
 from sklearn.model_selection import train_test_split
-X_train, X_valid, y_train, y_valid = train_test_split(X, dummy_y, test_size=0.3, random_state=42)
+X_train, X_valid, y_train, y_valid = train_test_split(X, dummy_y, test_size=0.25, random_state=42)
 
 # Import packages
 from keras.models import Sequential
@@ -110,15 +109,15 @@ X_valid = base_model.predict(X_valid)
 X_train.shape, X_valid.shape
 
 # Reshape to 1-D
-X_train = X_train.reshape(65, 7*7*512)
-X_valid = X_valid.reshape(29, 7*7*512)
+X_train = X_train.reshape(70, 7*7*512)
+X_valid = X_valid.reshape(24, 7*7*512)
 
 # Pre-process images, make zero-centered
 train = X_train/X_train.max()
 X_valid = X_valid/X_train.max()
 
 
-# i. Building the model
+# Build the model
 model = Sequential()
 model.add(InputLayer((7*7*512,))) # input layer
 model.add(Dense(units=1024, activation='sigmoid')) # hidden layer
@@ -127,8 +126,86 @@ model.add(Dense(2, activation='softmax')) # output layer
 # Model summary
 model.summary()
 
-# ii. Compiling the model
+# Compile the model
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
-# iii. Training the model
+# Train the model
 model.fit(train, y_train, epochs=100, validation_data=(X_valid, y_valid))
+
+
+#####################################
+############ TEST MODEL #############
+#####################################
+
+# Install packages
+from glob import glob
+from tqdm import tqdm
+from scipy import stats as s
+
+# Get list of test file names
+test_file_path = cd + r'\test_videos'
+f = open(test_file_path + r'\\' + 'test_list.txt', 'r')
+temp = f.read()
+videos = temp.split('\n')
+
+# Create dataframe
+test = pd.DataFrame({'video_name': videos})
+test_videos = test['video_name']
+
+# Create lists to store tags
+predict = []
+actual = [1, 1, 1, 0, 0, 0]
+
+# Create directory to hold test video frames
+os.mkdir(f'{cd}/test_frames')
+
+# Loop to extract test video frames
+for i in tqdm(range(test_videos.shape[0])):
+    count = 0
+    videoFile = test_videos[i]
+    cap = cv2.VideoCapture('test_videos/' + videoFile)
+    frameRate = cap.get(5)
+    x = 1
+    '''
+    # removing all other files from the temp folder
+    files = glob('temp/*')
+    for f in files:
+        os.remove(f)
+    '''
+    while cap.isOpened():
+        frameId = cap.get(1)  # current frame number
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if frameId % math.floor(frameRate) == 0:
+            # Store video frames in newly created 'test_frames' directory
+            filename = 'test_frames/' + videoFile[:-4] + "_frame%d.jpg" % count
+            count += 1
+            cv2.imwrite(filename, frame)
+    cap.release()
+
+    # Read frames from 'test_frames' directory
+    images = glob("test_frames/*.jpg")
+
+    prediction_images = []
+    for i in range(len(images)):
+        img = image.load_img(images[i], target_size=(224, 224, 3))
+        img = image.img_to_array(img)
+        img = img / 255
+        prediction_images.append(img)
+
+    # converting all the frames for a test video into numpy array
+    prediction_images = np.array(prediction_images)
+    # extracting features using pre-trained model
+    prediction_images = base_model.predict(prediction_images)
+    # converting features in one dimensional array
+    prediction_images = prediction_images.reshape(prediction_images.shape[0], 7 * 7 * 512)
+    # predicting tags for each array
+    prediction = model.predict_classes(prediction_images)
+    # appending the mode of predictions in predict list to assign the tag to the video
+    predict.append(y.columns.values[s.mode(prediction)[0][0]])
+    # appending the actual tag of the video
+    actual.append(videoFile.split('/')[1].split('_')[1])
+
+
+
