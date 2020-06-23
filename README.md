@@ -16,6 +16,7 @@ These are all of the packages necessary for creating the necessary dataframes, g
 ```python
 # Import packages
 import os
+os.environ['HDF5_DISABLE_VERSION_CHECK'] = '1'
 import cv2
 import math
 import pandas as pd
@@ -32,9 +33,7 @@ from keras.layers import Dense, InputLayer, Dropout
 from glob import glob
 from tqdm import tqdm
 from scipy import stats as s
-from sklearn.metrics import accuracy_score
-
-os.environ['HDF5_DISABLE_VERSION_CHECK'] = '1'
+from sklearn.metrics import accuracy_score, confusion_matrix
 ```
 
 #### Read video, extract frames, save as images
@@ -43,11 +42,11 @@ The below code was used to pull the training videos from the local GitHub file s
 
 ```python
 cd = os.getcwd()
-os.mkdir(f'{cd}/frames2')
+os.mkdir(f'{cd}/frames')
 # Extract pass video frames
 for i in range(1, 21):
     count = 0
-    videoFile = f"{cd}/training_videos2/pass{i}.mp4"
+    videoFile = f"{cd}/training_videos/pass{i}.mp4"
     cap = cv2.VideoCapture(videoFile)
     frameRate = cap.get(5)
     x = 1
@@ -58,15 +57,16 @@ for i in range(1, 21):
             break
         if frameId % math.floor(frameRate) == 0:
             ext = f'pass{i}_'
-            filename = f"{cd}/frames2/{ext}frame%d.jpg" % count
+            filename = f"{cd}/frames/{ext}frame%d.jpg" % count
             count += 1
             cv2.imwrite(filename, frame)
     cap.release()
+    print(f"Done extracting pass{i}")
 
 # Extract run video frames
 for i in range(1, 21):
     count = 0
-    videoFile = f"{cd}/training_videos2/run{i}.mp4"
+    videoFile = f"{cd}/training_videos/run{i}.mp4"
     cap = cv2.VideoCapture(videoFile)
     frameRate = cap.get(cv2.CAP_PROP_FPS)
     x = 1
@@ -77,10 +77,11 @@ for i in range(1, 21):
             break
         if frameId % math.floor(frameRate) == 0:
             ext = f'run{i}_'
-            filename = f"{cd}/frames2/{ext}frame%d.jpg" % count
+            filename = f"{cd}/frames/{ext}frame%d.jpg" % count
             count += 1
             cv2.imwrite(filename, frame)
     cap.release()
+    print(f"Done extracting run{i}")
 ```
 
 #### Image mapping
@@ -89,7 +90,7 @@ This section of code takes in `mapping.csv`, a manually created mapping file tha
 
 ```python
 # Read in mapping.csv
-data = pd.read_csv(f'{cd}/mapping2.csv')
+data = pd.read_csv(f'{cd}/mapping.csv')
 
 # Create array of image files
 X = []
@@ -152,4 +153,86 @@ model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accur
 
 # Train the model
 model.fit(train, y_train, epochs=100, validation_data=(X_valid, y_valid))
+```
+
+#### Model testing/evaluation
+
+This last section of code starts by extracting the `test_list.txt` file from the `test_videos` folder to get the full list of test video names. From there, a dataframe is created using the names and assigning class tags to them. Two lists are then created, one an empty list as a placeholder for the predictions our model will make, and the other a list of the true tags for our test videos. 
+
+Before we can test, we must create a new directory to hold the individual frames that will be extracted from the test videos (`test_frames`). Each video file is looped through using a similar technique to what we did for the original training videos to extract the frames. Once these frames are all compiled in the `test_frames` folder, we use our trained VGG16 model to generate predictions. Finally, using `accuracy_score` and `confusion_matrix` from the scikit-learn Python library, we are able to determine the accuracy of our model predictions.
+
+```python
+# Get list of test file names
+test_file_path = cd + r'\test_videos'
+f = open(test_file_path + '\\' + 'test_list.txt', 'r')
+temp = f.read()
+videos = temp.split('\n')
+
+# Create dataframe
+test = pd.DataFrame({'video_name': videos})
+test_videos = test['video_name']
+
+classes = []
+for index, row in test.iterrows():
+    if 'pass' in row['video_name']:
+        classes.append(1)
+    else:
+        classes.append(0)
+test['class'] = classes
+
+# creating the tags
+test_y = test['class']
+test_y = pd.get_dummies(test_y)
+
+# Create lists to store tags
+predict = []
+actual = [1, 1, 1, 1, 1, 0, 0, 0, 0, 0]
+
+# Create directory to hold test video frames
+os.mkdir(f'{cd}/test_frames')
+
+# Loop to extract test video frames
+for i in tqdm(range(test_videos.shape[0])):
+    count = 0
+    video_file = test_videos[i]
+    cap = cv2.VideoCapture('test_videos/' + video_file)
+    frameRate = cap.get(5)
+    x = 1
+
+    while cap.isOpened():
+        frameId = cap.get(1)
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if frameId % math.floor(frameRate) == 0:
+            # Store video frames in newly created 'test_frames' directory
+            filename = 'test_frames/' + video_file[:-4] + "_frame%d.jpg" % count
+            count += 1
+            cv2.imwrite(filename, frame)
+    cap.release()
+
+    # Read frames from 'test_frames' directory
+    images = glob("test_frames/*.jpg")
+
+    prediction_images = []
+    for i in range(len(images)):
+        img = keras.preprocessing.image.load_img(images[i], target_size=(224, 224, 3))
+        img = keras.preprocessing.image.img_to_array(img)
+        img = img / 255
+        prediction_images.append(img)
+
+    # Convert test video frames to numpy array
+    prediction_images = np.array(prediction_images)
+    # Extract features using VGG16 model
+    prediction_images = base_model.predict(prediction_images)
+    # Convert extracted features to 1D array
+    prediction_images = prediction_images.reshape(prediction_images.shape[0], 7 * 7 * 512)
+    # Generate predictions
+    prediction = model.predict_classes(prediction_images)
+    # Append predictions to list
+    predict.append(test_y.columns.values[s.mode(prediction)[0][0]])
+
+# Get accuracy
+accuracy_score(predict, actual) * 100
+confusion_matrix(actual, predict)
 ```
