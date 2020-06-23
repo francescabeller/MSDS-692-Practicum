@@ -1,6 +1,10 @@
 pass_test_1.mp4
 pass_test_2.mp4
 pass_test_3.mp4
+pass_test_4.mp4
+pass_test_5.mp4
 run_test_1.mp4
 run_test_2.mp4
 run_test_3.mp4
+run_test_4.mp4
+run_test_5.mp4
