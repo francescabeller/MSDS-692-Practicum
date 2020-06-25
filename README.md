@@ -236,3 +236,7 @@ for i in tqdm(range(test_videos.shape[0])):
 accuracy_score(predict, actual) * 100
 confusion_matrix(actual, predict)
 ```
+
+## References
+https://www.analyticsvidhya.com/blog/2019/09/step-by-step-deep-learning-tutorial-video-classification-python/
+https://www.pyimagesearch.com/2019/07/15/video-classification-with-keras-and-deep-learning/
