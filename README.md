@@ -1,5 +1,8 @@
 # MSDS-692-Practicum
 
+#### Link to Video Presentation
+https://youtu.be/wRyDUlVSLJM
+
 ## NFL Video Classification with Keras
 Keras is one of the most used Python libraries for deep learning, and with its built-in, pre-trained video classification algorithms, it is a great tool for video classification. In this repository, code will be shown that generates a binary classification system for labeling NFL play videos as either a pass play or a run play using Keras' VGG16 algorithm.
 
